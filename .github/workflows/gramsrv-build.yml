@@ -1,0 +1,52 @@
+name: Build gramsrv Android client
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout source and native submodules
+        uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: temurin
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Set up Android SDK, NDK and CMake
+        uses: android-actions/setup-android@v3
+        with:
+          packages: >-
+            platforms;android-37
+            build-tools;37.0.0
+            ndk;27.3.13750724
+            cmake;4.0.0
+
+      - name: Configure internal build
+        shell: bash
+        run: |
+          printf '%s\n' \
+            'apiId=1' \
+            'apiHash=gramsrv-internal' \
+            'helperBotId=0' \
+            'helperBotUsername=' \
+            'sentryDsn=' \
+            'mapsApiKey=' > local.properties
+
+      - name: Build debug APK
+        run: ./gradlew assembleDebug --no-daemon --stacktrace
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: nekogram-gramsrv-debug
+          path: TMessagesProj_App/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
