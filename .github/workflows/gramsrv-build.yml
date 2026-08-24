@@ -28,7 +28,7 @@ jobs:
             platforms;android-37.0
             build-tools;37.0.0
             ndk;27.3.13750724
-            cmake;4.0.0
+            cmake;3.22.1
 
       - name: Configure internal build
         shell: bash
