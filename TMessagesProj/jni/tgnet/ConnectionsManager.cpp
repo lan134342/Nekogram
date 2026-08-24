@@ -44,6 +44,11 @@ jmethodID jclass_ByteBuffer_allocateDirect = nullptr;
 
 static bool done = false;
 
+// This build is tied to the company's gramsrv edge. Keeping the endpoint here avoids
+// falling back to Telegram's production DC list when a stale local config is present.
+static constexpr const char *GRAMSRV_ADDRESS = "198.44.181.230";
+static constexpr uint32_t GRAMSRV_PORT = 2398;
+
 ConnectionsManager::ConnectionsManager(int32_t instance) {
     instanceNum = instance;
     if ((epolFd = epoll_create(128)) == -1) {
@@ -371,6 +376,7 @@ void *ConnectionsManager::ThreadProc(void *data) {
 }
 
 void ConnectionsManager::loadConfig() {
+    bool loadedTestBackend = false;
     if (config == nullptr) {
         config = new Config(instanceNum, "tgnet.dat");
     }
@@ -380,6 +386,7 @@ void ConnectionsManager::loadConfig() {
         if (LOGS_ENABLED) DEBUG_D("config version = %u", version);
         if (version <= configVersion) {
             testBackend = buffer->readBool(nullptr);
+            loadedTestBackend = testBackend;
             if (version >= 3) {
                 clientBlocked = buffer->readBool(nullptr);
             }
@@ -423,6 +430,14 @@ void ConnectionsManager::loadConfig() {
         buffer->reuse();
     }
 
+    // The server uses the published test RSA identity and a single public edge.
+    // An old production config must not be reused against the private server.
+    testBackend = true;
+    if (!loadedTestBackend) {
+        currentDatacenterId = 0;
+        datacenters.clear();
+    }
+
     if (currentDatacenterId != 0 && currentUserId) {
         Datacenter *datacenter = getDatacenterWithId(currentDatacenterId);
         if (datacenter == nullptr || !datacenter->hasPermanentAuthKey()) {
@@ -441,12 +456,21 @@ void ConnectionsManager::loadConfig() {
 
     initDatacenters();
 
+    // Keep an existing auth key, but replace any stale Telegram address persisted by
+    // an earlier build. gramsrv exposes every logical DC through the same edge.
+    for (auto &entry : datacenters) {
+        std::vector<TcpAddress> addresses;
+        addresses.emplace_back(GRAMSRV_ADDRESS, GRAMSRV_PORT, 0, "");
+        entry.second->replaceAddresses(addresses, 0);
+        entry.second->replaceAddresses(addresses, 2);
+    }
+
     if ((!datacenters.empty() && currentDatacenterId == 0) || pushSessionId == 0) {
         if (pushSessionId == 0) {
             RAND_bytes((uint8_t *) &pushSessionId, 8);
         }
         if (currentDatacenterId == 0) {
-            currentDatacenterId = 2;
+            currentDatacenterId = 1;
         }
         saveConfig();
     }
@@ -1865,22 +1889,19 @@ void ConnectionsManager::initDatacenters() {
     } else {
         if (datacenters.find(1) == datacenters.end()) {
             datacenter = new Datacenter(instanceNum, 1);
-            datacenter->addAddressAndPort("149.154.175.40", 443, 0, "");
-            datacenter->addAddressAndPort("2001:b28:f23d:f001:0000:0000:0000:000e", 443, 1, "");
+            datacenter->addAddressAndPort(GRAMSRV_ADDRESS, GRAMSRV_PORT, 0, "");
             datacenters[1] = datacenter;
         }
 
         if (datacenters.find(2) == datacenters.end()) {
             datacenter = new Datacenter(instanceNum, 2);
-            datacenter->addAddressAndPort("149.154.167.40", 443, 0, "");
-            datacenter->addAddressAndPort("2001:67c:4e8:f002:0000:0000:0000:000e", 443, 1, "");
+            datacenter->addAddressAndPort(GRAMSRV_ADDRESS, GRAMSRV_PORT, 0, "");
             datacenters[2] = datacenter;
         }
 
         if (datacenters.find(3) == datacenters.end()) {
             datacenter = new Datacenter(instanceNum, 3);
-            datacenter->addAddressAndPort("149.154.175.117", 443, 0, "");
-            datacenter->addAddressAndPort("2001:b28:f23d:f003:0000:0000:0000:000e", 443, 1, "");
+            datacenter->addAddressAndPort(GRAMSRV_ADDRESS, GRAMSRV_PORT, 0, "");
             datacenters[3] = datacenter;
         }
     }
@@ -2054,7 +2075,7 @@ void ConnectionsManager::setUserId(int64_t userId) {
 void ConnectionsManager::switchBackend(bool restart) {
     scheduleTask([&, restart] {
         currentDatacenterId = 1;
-        testBackend = !testBackend;
+        testBackend = true;
         if (!restart) {
             Handshake::cleanupServerKeys();
         }

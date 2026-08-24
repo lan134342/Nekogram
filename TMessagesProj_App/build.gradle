@@ -2,8 +2,13 @@ import com.android.build.api.variant.FilterConfiguration
 
 plugins {
     id 'com.android.application'
-    id 'com.google.gms.google-services'
     id 'io.sentry.android.gradle'
+}
+
+// Firebase is optional for this private build; omitting the plugin avoids requiring
+// a company Google project just to produce an internally distributed APK.
+if (file('google-services.json').exists()) {
+    apply plugin: 'com.google.gms.google-services'
 }
 
 dependencies {
