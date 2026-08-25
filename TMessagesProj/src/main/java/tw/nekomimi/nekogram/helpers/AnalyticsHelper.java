@@ -39,6 +39,14 @@ public class AnalyticsHelper {
             FileLog.d("Analytics: userId = disabled");
             return;
         }
+        // 内部版不带 google-services.json，Firebase 没有 google_app_id 时 getInstance
+        // 会在 Application.onCreate 阶段直接抛异常，表现为点击图标立即闪退。
+        int googleAppId = application.getResources().getIdentifier("google_app_id", "string", application.getPackageName());
+        if (googleAppId == 0) {
+            analyticsDisabled = true;
+            FileLog.d("Analytics: Firebase config missing, disabled for internal build");
+            return;
+        }
         userId = preferences.getString("userId", null);
         if (userId == null || userId.length() < 32) {
             preferences.edit().putString("userId", userId = generateUserID()).apply();
