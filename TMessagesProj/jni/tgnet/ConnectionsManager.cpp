@@ -433,7 +433,9 @@ void ConnectionsManager::loadConfig() {
     // The server uses the published test RSA identity and a single public edge.
     // An old production config must not be reused against the private server.
     testBackend = true;
-    if (!loadedTestBackend) {
+    if (!loadedTestBackend || currentDatacenterId != 2) {
+        // Older internal builds persisted DC 1. Its auth key cannot be reused
+        // as a DC 2 media session, so reset once and let the user sign in again.
         currentDatacenterId = 0;
         datacenters.clear();
     }
@@ -470,7 +472,10 @@ void ConnectionsManager::loadConfig() {
             RAND_bytes((uint8_t *) &pushSessionId, 8);
         }
         if (currentDatacenterId == 0) {
-            currentDatacenterId = 1;
+            // gramsrv is deployed as a single public DC; media records use DC 2.
+            // Keeping the active session on that same label avoids the unsupported
+            // cross-DC auth.exportAuthorization path during media downloads.
+            currentDatacenterId = 2;
         }
         saveConfig();
     }
@@ -2074,7 +2079,7 @@ void ConnectionsManager::setUserId(int64_t userId) {
 
 void ConnectionsManager::switchBackend(bool restart) {
     scheduleTask([&, restart] {
-        currentDatacenterId = 1;
+        currentDatacenterId = 2;
         testBackend = true;
         if (!restart) {
             Handshake::cleanupServerKeys();
