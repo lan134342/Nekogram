@@ -355,6 +355,9 @@ target_compile_options(${NATIVE_LIB} PUBLIC
 target_compile_definitions(${NATIVE_LIB} PUBLIC
         BSD=1 NULL=0 SOCKLEN_T=socklen_t ANDROID_NDK DISABLE_IMPORTGL AVOID_TABLES ANDROID_TILE_BASED_DECODE __STDC_CONSTANT_MACROS ANDROID_ARMV6_IDCT OPUS_BUILD FIXED_POINT USE_ALLOCA restrict= __EMX__ LOCALE_NOT_USED HAVE_LRINT HAVE_LRINTF)
 
+# The internal APK is signed by CI rather than the official Nekogram key.
+target_compile_definitions(${NATIVE_LIB} PRIVATE GRAMSRV_INTERNAL)
+
 if (${ANDROID_ABI} STREQUAL "armeabi-v7a")
     set_target_properties(${NATIVE_LIB} PROPERTIES
             ANDROID_ARM_NEON FALSE
